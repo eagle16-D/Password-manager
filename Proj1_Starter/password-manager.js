@@ -43,34 +43,18 @@ class Keychain {
     */
   static async init(password) {
     try {
-      const salt =await subtle.digest("SHA-256", stringToBuffer(password)); 
+      const salt = await subtle.digest(
+        "SHA-256",
+        stringToBuffer(password)
+      );
+
       const KEY = await genKeyFromMasterPassword(password, salt);
-      let keychain = new Keychain();
-
-      // const r1 = getRandomBytes(32);
-      // const hmacKeyDomain = await subtle.sign(
-      //   {
-      //     name: "HMAC",
-      //   },
-      //   KEY,
-      //   r1,
-      // );
-
-      // const r2 = getRandomBytes(32);
-      // const hmacKeyPassword = await subtle.sign(
-      //   {
-      //     name: "HMAC",
-      //   },
-      //   KEY,
-      //   r2,
-      // );
+      const keychain = new Keychain();
 
       keychain.secrets = {
         masterPassword: password,
         salt: salt,
-        KEY: KEY,
-        // hmacKeyDomain: hmacKeyDomain,
-        // hmacKeyPassword: hmacKeyPassword
+        KEY: KEY
       };
 
       return keychain;
@@ -103,9 +87,8 @@ class Keychain {
 
       if (trustedDataCheck !== undefined) {
         const computedShaStr = await subtle.digest('sha-256', stringToBuffer(pmJson));
-        console.log(computedShaStr);
-        console.log(trustedDataCheck);
-        if (!compareArrayBuffers(computedShaStr, trustedDataCheck)) {
+
+        if (bufferToString(computedShaStr) !== trustedDataCheck) {
           throw new Error('Integrity check failed. The checksum does not match');
         }
       } else {
@@ -115,6 +98,19 @@ class Keychain {
 
       let keychain = new Keychain();
       keychain.data = JSON.parse(pmJson);
+
+      const salt = await subtle.digest(
+        'SHA-256',
+        stringToBuffer(password)
+      );
+
+      const KEY = await genKeyFromMasterPassword(password, salt);
+      keychain.secrets.masterPassword = password;
+      keychain.secrets.salt = salt;
+      keychain.secrets.KEY = KEY;
+
+
+      console.log("keychain", keychain);
       return keychain;
 
     } catch (error) {
@@ -138,8 +134,14 @@ class Keychain {
   async dump() {
     try {
       const pmJson = JSON.stringify(this.data);
-      const pmShaStr = await subtle.digest('sha-256', stringToBuffer(pmJson));
-      return [pmJson, pmShaStr];
+  
+      const pmShaStr = await subtle.digest(
+        'SHA-256',
+        stringToBuffer(pmJson)
+      );
+      // console.log(this);
+
+      return [pmJson, bufferToString(pmShaStr)];
     } catch (error) {
       console.error("Error dumping value:", error);
       throw error;
@@ -155,19 +157,94 @@ class Keychain {
     *   name: string
     * Return Type: Promise<string>
     */
-  async get(name) {
+  async get(Name) {
     try {
-      const name_sign = await subtle.sign("HMAC", this.secrets.hmacKeyDomain, stringToBuffer(name));
-      const base64NameSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
-      if (this.data[base64NameSignature] !== undefined) {
-        return this.data[base64NameSignature];
-      }
-      else {
+
+      /**----------------------- */
+      const r1 = await subtle.digest(
+        "SHA-256",
+        stringToBuffer(Name)
+      );
+
+      const domain_key = await subtle.sign(
+        {
+          name: "HMAC",
+        },
+        this.secrets.KEY,
+        r1
+      );
+
+      const domainName_key = await subtle.importKey(
+        "raw",
+        domain_key,
+        {
+          name: "HMAC",
+          hash: "SHA-256"
+        },
+        false,
+        ["sign"]
+      );
+
+      const name_sign = await subtle.sign(
+        "HMAC",
+        domainName_key,
+        stringToBuffer(Name)
+      );
+
+      const Entry = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
+
+      /**----------------------------- */
+
+      const name = Object.keys(this.data).find(key => key === Entry);
+
+      // console.log(this.data);
+      if (name === undefined) {
+
         return null;
+      } else {
+        console.log("Found value for", name);
+
+
+        // get the corresponded encrypted password
+        const encrypted_password = Buffer.from(this.data[Entry], 'base64');
+
+
+        // decrypt the password
+        // iv is the first 16 bytes of encrypted password
+        const iv = encrypted_password.subarray(0, 16);
+
+        const r2 = await subtle.digest(
+          "SHA-256",
+          stringToBuffer(r1)
+        );
+        const pass_key = await subtle.sign(
+          "HMAC",
+          this.secrets.KEY,
+          r2
+        );
+        const password_key = await subtle.importKey(
+          "raw",
+          pass_key,
+          "AES-GCM",
+          false,
+          ["decrypt"]
+        );
+
+        const password = await subtle.decrypt(
+          {
+            name: "AES-GCM",
+            iv: iv
+          },
+          password_key,
+          encrypted_password.subarray(16,)
+        );
+
+        return bufferToString(password);
       }
     } catch (error) {
-      console.error("Error getting value:", error);
+      console.log("Error getting value:", error);
       throw error;
+
     }
   };
 
@@ -183,18 +260,89 @@ class Keychain {
   */
   async set(name, value) {
     try {
+      console.log("Setting value for", name, "to", value);
 
-      let existingEntry = await this.get(name);
-      // console.log(existingEntry);
-      if (existingEntry !== null) {
-        console.log(`Updating entry for ${name}`);
-      } else {
-        console.log(`Adding new entry for ${name}`);
-      }
-      const name_sign = await subtle.sign("HMAC", this.secrets.hmacKeyDomain, stringToBuffer(name));
-      const base64NameSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
-      const value_encrypted = await subtle.encrypt("AES-GCM", this.secrets.hmacKeyPassword, stringToBuffer(value));
-      this.data[base64NameSignature] = String(value_encrypted);
+      /**------------------ */
+
+      /**---------------------------------- */
+
+      const r1 = await subtle.digest(
+        "SHA-256",
+        stringToBuffer(name)
+      );
+
+
+      const domain_key = await subtle.sign(
+        {
+          name: "HMAC",
+        },
+        this.secrets.KEY,
+        r1
+      );
+
+      const domainName_key = await subtle.importKey(
+        "raw",
+        domain_key,
+        {
+          name: "HMAC",
+          hash: "SHA-256"
+        },
+        false,
+        ["sign"]
+      );
+
+
+      const name_sign = await subtle.sign(
+        "HMAC",
+        domainName_key,
+        stringToBuffer(name)
+      );
+
+      const Entry = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
+
+
+      /**------------------------------- */
+
+      const r2 = await subtle.digest(
+        "SHA-256",
+        stringToBuffer(r1)
+      );
+      const pass_key = await subtle.sign(
+        "HMAC",
+        this.secrets.KEY,
+        r2
+      ); //pass_key is used to create password_key by importKey()
+
+      // generate an IV with length 128 bits
+      const iv = getRandomBytes(16);
+
+      const password_key = await subtle.importKey(
+        "raw",
+        pass_key,
+        {
+          name: "AES-GCM",
+        },
+        false,
+        ["encrypt"]
+      );
+
+      const value_encrypted = await subtle.encrypt(
+        {
+          name: "AES-GCM",
+          iv: iv
+        },
+        password_key,
+        stringToBuffer(value)
+      );
+
+      // arraybuffer to string
+
+      const a = new Uint8Array(value_encrypted);
+      const string_value_encrypted = btoa(String.fromCharCode.apply(null, new Uint8Array(concatenateUint8Arrays(iv, new Uint8Array(value_encrypted)))));
+
+
+      this.data[Entry] = string_value_encrypted;
+
     } catch (error) {
       console.error("Error setting value:", error);
       throw error;
@@ -211,14 +359,48 @@ class Keychain {
   */
   async remove(name) {
     try {
-      const name_sign = await subtle.sign("HMAC", this.secrets.hmacKeyDomain, stringToBuffer(name));
-      const base64NameSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
-      if (this.data[base64NameSignature] !== undefined) {
-        delete this.data[base64NameSignature];
-        return true;
-      }
-      else {
+      console.log("Removing value for", name);
+
+      /**----------------------- */
+      const r1 = await subtle.digest(
+        "SHA-256",
+        stringToBuffer(name)
+      );
+
+      const domain_key = await subtle.sign(
+        {
+          name: "HMAC",
+        },
+        this.secrets.KEY,
+        r1
+      );
+
+      const domainName_key = await subtle.importKey(
+        "raw",
+        domain_key,
+        {
+          name: "HMAC",
+          hash: "SHA-256"
+        },
+        false,
+        ["sign"]
+      );
+
+      const name_sign = await subtle.sign(
+        "HMAC",
+        domainName_key,
+        stringToBuffer(name)
+      );
+
+      const Entry = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
+
+      /**----------------------------- */
+
+      if (this.data[Entry] === undefined) {
         return false;
+      } else {
+        delete this.data[Entry];
+        return true;
       }
     } catch (error) {
       console.error("Error removing value:", error);
@@ -233,7 +415,7 @@ module.exports = { Keychain }
 function getKeyMaterial(password) {
   return subtle.importKey(
     "raw",
-    Buffer.from(password),
+    stringToBuffer(password),
     {
       name: "PBKDF2"
     },
@@ -256,9 +438,9 @@ async function genKeyFromMasterPassword(password, _salt) {
       {
         name: "HMAC",
         hash: "SHA-256",
-        length: 128
+        length: 256
       },
-      false,
+      true,
       ["sign"]
     );
     return key;
@@ -269,11 +451,16 @@ async function genKeyFromMasterPassword(password, _salt) {
   }
 }
 
-function compareArrayBuffers(buf1, buf2) {
-  // Create Uint8Array views for both ArrayBuffer objects
-  const view1 = new Uint8Array(buf1);
-  const view2 = new Uint8Array(buf2);
 
-  // Compare the entire Uint8Array arrays at once
-  return view1.length === view2.length && view1.every((value, index) => value === view2[index]);
+function concatenateUint8Arrays(first, second) {
+  // Create a new array that can hold the combined length of both input arrays
+  const concatenatedArray = new Uint8Array(first.length + second.length);
+
+  // Copy the contents of the first array into the new array
+  concatenatedArray.set(first, 0);
+
+  // Copy the contents of the second array into the new array, starting right after the end of the first
+  concatenatedArray.set(second, first.length);
+
+  return concatenatedArray;
 }
