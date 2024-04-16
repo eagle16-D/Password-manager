@@ -114,36 +114,36 @@ describe('Password manager', async function () {
         });
     });
 
-    // describe('security', async function() {
+    describe('security', async function() {
 
-    //     // Very basic test to make sure you're not doing the most naive thing
-    //     it("doesn't store domain names and passwords in the clear", async function() {
-    //         let keychain = await Keychain.init(password);
-    //         let url = 'www.stanford.edu';
-    //         let pw = 'sunetpassword';
-    //         await keychain.set(url, pw);
-    //         let data = await keychain.dump();
-    //         let contents = data[0];
-    //         expect(contents).not.to.contain(password);
-    //         expect(contents).not.to.contain(url);
-    //         expect(contents).not.to.contain(pw);
-    //     });
-
-    //     // This test won't be graded directly -- it just exists to make sure your
-    //     // dump include a kvs object with all your urls and passwords, because
-    //     // we will be using that in other tests.
-    //     it('includes a kvs object in the serialized dump', async function() {
-    //         let keychain = await Keychain.init(password);
-    //         for (let i = 0; i < 10; i++) {
-    //             await keychain.set(String(i), String(i));
-    //         }
-    //         let data = await keychain.dump();
-    //         let contents = data[0];
-    //         let contentsObj = JSON.parse(contents);
-    //         expect(contentsObj).to.have.key('kvs');
-    //         expect(contentsObj.kvs).to.be.an('object');
-    //         expect(Object.getOwnPropertyNames(contentsObj.kvs)).to.have.length(10);
-    //     });
+        // Very basic test to make sure you're not doing the most naive thing
+        it("doesn't store domain names and passwords in the clear", async function() {
+            let keychain = await Keychain.init(password);
+            let url = 'www.stanford.edu';
+            let pw = 'sunetpassword';
+            await keychain.set(url, pw);
+            let data = await keychain.dump();
+            let contents = data[0];
+            expect(contents).not.to.contain(password);
+            expect(contents).not.to.contain(url);
+            expect(contents).not.to.contain(pw);
+        });
+    });
+        // This test won't be graded directly -- it just exists to make sure your
+        // dump include a kvs object with all your urls and passwords, because
+        // we will be using that in other tests.
+        it('includes a kvs object in the serialized dump', async function() {
+            let keychain = await Keychain.init(password);
+            for (let i = 0; i < 10; i++) {
+                await keychain.set(String(i), String(i));
+            }
+            let data = await keychain.dump();
+            let contents = data[0];
+            let contentsObj = JSON.parse(contents);
+            expect(contentsObj).to.have.key('kvs'); 
+            expect(contentsObj.kvs).to.be.an('object');
+            expect(Object.getOwnPropertyNames(contentsObj.kvs)).to.have.length(10);
+        });
 
     // });
 });

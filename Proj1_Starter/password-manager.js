@@ -50,10 +50,9 @@ class Keychain {
 
       const KEY = await genKeyFromMasterPassword(password, salt);
       const keychain = new Keychain();
-
+      keychain.data.salt = bufferToString(salt);
       keychain.secrets = {
         masterPassword: password,
-        salt: salt,
         KEY: KEY
       };
 
@@ -85,6 +84,7 @@ class Keychain {
     try {
       const pmJson = repr;
 
+
       if (trustedDataCheck !== undefined) {
         const computedShaStr = await subtle.digest('sha-256', stringToBuffer(pmJson));
 
@@ -96,17 +96,24 @@ class Keychain {
         return null;
       }
 
-      let keychain = new Keychain();
-      keychain.data = JSON.parse(pmJson);
-
       const salt = await subtle.digest(
         'SHA-256',
         stringToBuffer(password)
       );
 
+      console.log(pmJson);
+      const jsonData = JSON.parse(pmJson);
+      console.log(jsonData.salt);
+      if (bufferToString(salt) !== jsonData.salt) {
+        console.log(1);
+        throw new Error('incorrect password');
+      }
+      console.log(2);
+      let keychain = new Keychain();
+      keychain.data = jsonData;
+
       const KEY = await genKeyFromMasterPassword(password, salt);
       keychain.secrets.masterPassword = password;
-      keychain.secrets.salt = salt;
       keychain.secrets.KEY = KEY;
 
 
@@ -134,13 +141,13 @@ class Keychain {
   async dump() {
     try {
       const pmJson = JSON.stringify(this.data);
-  
+
       const pmShaStr = await subtle.digest(
         'SHA-256',
         stringToBuffer(pmJson)
       );
       // console.log(this);
-
+      
       return [pmJson, bufferToString(pmShaStr)];
     } catch (error) {
       console.error("Error dumping value:", error);
