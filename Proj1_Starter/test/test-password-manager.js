@@ -24,54 +24,54 @@ describe('Password manager', async function () {
 
     describe('functionality', async function () {
 
-        // it('inits without an error', async function () {
-        //     await Keychain.init(password);
-        // });
+        it('inits without an error', async function () {
+            await Keychain.init(password);
+        });
 
-        // it('can set and retrieve a password', async function () {
-        //     let keychain = await Keychain.init(password);
-        //     let url = 'www.stanford.edu';
-        //     let pw = 'sunetpassword';
-        //     await keychain.set(url, pw);
-        //     expect(await keychain.get(url)).to.equal(pw);
-        //     console.log(keychain.secrets)
-        // });
+        it('can set and retrieve a password', async function () {
+            let keychain = await Keychain.init(password);
+            let url = 'www.stanford.edu';
+            let pw = 'sunetpassword';
+            await keychain.set(url, pw);
+            expect(await keychain.get(url)).to.equal(pw);
+            console.log(keychain.secrets)
+        });
 
-        // it('can set and retrieve multiple passwords', async function () {
-        //     let keychain = await Keychain.init(password);
-        //     for (let k in kvs) {
-        //         await keychain.set(k, kvs[k]);
-        //     }
-        //     for (let k in kvs) {
-        //         expect(await keychain.get(k)).to.equal(kvs[k]);
-        //     }
-        // });
+        it('can set and retrieve multiple passwords', async function () {
+            let keychain = await Keychain.init(password);
+            for (let k in kvs) {
+                await keychain.set(k, kvs[k]);
+            }
+            for (let k in kvs) {
+                expect(await keychain.get(k)).to.equal(kvs[k]);
+            }
+        });
 
 
-        // it('returns null for non-existent passwords', async function () {
-        //     let keychain = await Keychain.init(password);
-        //     for (let k in kvs) {
-        //         await keychain.set(k, kvs[k]);
-        //     }
-        //     expect(await keychain.get('www.stanford.edu')).to.be(null);
-        // });
+        it('returns null for non-existent passwords', async function () {
+            let keychain = await Keychain.init(password);
+            for (let k in kvs) {
+                await keychain.set(k, kvs[k]);
+            }
+            expect(await keychain.get('www.stanford.edu')).to.be(null);
+        });
 
-        // it('can remove a password', async function () {
-        //     let keychain = await Keychain.init(password);
-        //     for (let k in kvs) {
-        //         await keychain.set(k, kvs[k]);
-        //     }
-        //     expect(await keychain.remove('service1')).to.be(true);
-        //     expect(await keychain.get('service1')).to.be(null);
-        // });
+        it('can remove a password', async function () {
+            let keychain = await Keychain.init(password);
+            for (let k in kvs) {
+                await keychain.set(k, kvs[k]);
+            }
+            expect(await keychain.remove('service1')).to.be(true);
+            expect(await keychain.get('service1')).to.be(null);
+        });
 
-        // it('returns false if there is no password for the domain being removed', async function () {
-        //     let keychain = await Keychain.init(password);
-        //     for (let k in kvs) {
-        //         await keychain.set(k, kvs[k]);
-        //     }
-        //     expect(await keychain.remove('www.stanford.edu')).to.be(false);
-        // });
+        it('returns false if there is no password for the domain being removed', async function () {
+            let keychain = await Keychain.init(password);
+            for (let k in kvs) {
+                await keychain.set(k, kvs[k]);
+            }
+            expect(await keychain.remove('www.stanford.edu')).to.be(false);
+        });
 
         it('can dump and restore the database', async function () {
             let keychain = await Keychain.init(password);
@@ -93,27 +93,27 @@ describe('Password manager', async function () {
             }
         });
 
-    //     it('fails to restore the database if checksum is wrong', async function () {
-    //         let keychain = await Keychain.init(password);
-    //         for (let k in kvs) {
-    //             await keychain.set(k, kvs[k]);
-    //         }
-    //         let data = await keychain.dump();
-    //         let contents = data[0];
-    //         let fakeChecksum = '3GB6WSm+j+jl8pm4Vo9b9CkO2tZJzChu34VeitrwxXM=';
-    //         await expectReject(Keychain.load(password, contents, fakeChecksum));
-    //     });
+        it('fails to restore the database if checksum is wrong', async function () {
+            let keychain = await Keychain.init(password);
+            for (let k in kvs) {
+                await keychain.set(k, kvs[k]);
+            }
+            let data = await keychain.dump();
+            let contents = data[0];
+            let fakeChecksum = '3GB6WSm+j+jl8pm4Vo9b9CkO2tZJzChu34VeitrwxXM=';
+            await expectReject(Keychain.load(password, contents, fakeChecksum));
+        });
 
-        // it('returns false if trying to load with an incorrect password', async function () {
-        //     let keychain = await Keychain.init(password);
-        //     for (let k in kvs) {
-        //         await keychain.set(k, kvs[k]);
-        //     }
-        //     let data = await keychain.dump();
-        //     let contents = data[0];
-        //     let checksum = data[1];
-        //     await expectReject(Keychain.load("fakepassword", contents, checksum));
-        // });
+        it('returns false if trying to load with an incorrect password', async function () {
+            let keychain = await Keychain.init(password);
+            for (let k in kvs) {
+                await keychain.set(k, kvs[k]);
+            }
+            let data = await keychain.dump();
+            let contents = data[0];
+            let checksum = data[1];
+            await expectReject(Keychain.load("fakepassword", contents, checksum));
+        });
     });
 
     describe('security', async function() {
