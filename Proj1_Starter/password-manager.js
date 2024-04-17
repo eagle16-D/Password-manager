@@ -114,7 +114,7 @@ class Keychain {
         throw new Error('incorrect password');
       }
 
-      return new Keychain(jsonData.data.kvs, KEY_new, jsonData.salt);;
+      return new Keychain(jsonData.kvs, KEY_new, jsonData.salt);;
 
     } catch (error) {
       console.error("Error loading keychain:", error);
@@ -146,7 +146,7 @@ class Keychain {
         exported_key
       ));
 
-      const pmJson = JSON.stringify(this);
+      const pmJson = JSON.stringify({kvs: this.data.kvs, secrets: this.secrets, salt: this.salt});
 
       const pmShaStr = await subtle.digest(
         'SHA-256',
