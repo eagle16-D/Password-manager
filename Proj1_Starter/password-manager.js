@@ -21,15 +21,20 @@ class Keychain {
    *  You may design the constructor with any parameters you would like. 
    * Return Type: void
    */
-  constructor() {
+  constructor(kvs, KEY, salt) {
     this.data = {
       /* Store member variables that you intend to be public here
-         (i.e. information that will not compromise security if an adversary sees) */
+      (i.e. information that will not compromise security if an adversary sees) */
+      host: "NHD",
+      "version": "1.0",
+      kvs: kvs
     };
     this.secrets = {
       /* Store member variables that you intend to be private here
          (information that an adversary should NOT see). */
+         KEY: KEY
     };
+    this.salt = salt;
 
     // throw "Not Implemented!";
   };
@@ -43,20 +48,10 @@ class Keychain {
     */
   static async init(password) {
     try {
-      const salt = await subtle.digest(
-        "SHA-256",
-        stringToBuffer(password)
-      );
-
+      const salt = getRandomBytes(32);
       const KEY = await genKeyFromMasterPassword(password, salt);
-      const keychain = new Keychain();
-      keychain.data.salt = bufferToString(salt);
-      keychain.secrets = {
-        masterPassword: password,
-        KEY: KEY
-      };
 
-      return keychain;
+      return new Keychain({}, KEY, encodeBuffer(salt));
     } catch (error) {
       console.log("Error generating keychain:", error);
       throw error;
@@ -96,29 +91,30 @@ class Keychain {
         return null;
       }
 
-      const salt = await subtle.digest(
-        'SHA-256',
-        stringToBuffer(password)
+      // console.log(pmJson);
+      const jsonData = JSON.parse(pmJson);
+
+      const salt = decodeBuffer(jsonData.salt);
+
+
+      const KEY_new = await genKeyFromMasterPassword(password, salt);
+      const exported_key = await subtle.exportKey(
+        "raw",
+        KEY_new
       );
 
-      console.log(pmJson);
-      const jsonData = JSON.parse(pmJson);
-      console.log(jsonData.salt);
-      if (bufferToString(salt) !== jsonData.salt) {
+      const KEY_verify = encodeBuffer(await subtle.digest(
+        "SHA-256",
+        exported_key
+      ));
+
+
+      if (KEY_verify !== jsonData.secrets.KEY) {
         console.log(1);
         throw new Error('incorrect password');
       }
-      console.log(2);
-      let keychain = new Keychain();
-      keychain.data = jsonData;
 
-      const KEY = await genKeyFromMasterPassword(password, salt);
-      keychain.secrets.masterPassword = password;
-      keychain.secrets.KEY = KEY;
-
-
-      console.log("keychain", keychain);
-      return keychain;
+      return new Keychain(jsonData.data.kvs, KEY_new, jsonData.salt);;
 
     } catch (error) {
       console.error("Error loading keychain:", error);
@@ -140,14 +136,24 @@ class Keychain {
     */
   async dump() {
     try {
-      const pmJson = JSON.stringify(this.data);
+
+      const exported_key = await subtle.exportKey(
+        "raw",
+        this.secrets.KEY
+      );
+      this.secrets.KEY = encodeBuffer(await subtle.digest(
+        "SHA-256",
+        exported_key
+      ));
+
+      const pmJson = JSON.stringify(this);
 
       const pmShaStr = await subtle.digest(
         'SHA-256',
         stringToBuffer(pmJson)
       );
-      // console.log(this);
-      
+
+
       return [pmJson, bufferToString(pmShaStr)];
     } catch (error) {
       console.error("Error dumping value:", error);
@@ -198,23 +204,23 @@ class Keychain {
         stringToBuffer(Name)
       );
 
-      const Entry = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
+      const Entry = encodeBuffer(name_sign);
 
       /**----------------------------- */
 
-      const name = Object.keys(this.data).find(key => key === Entry);
+      const name = Object.keys(this.data.kvs).find(key => key === Entry);
 
       // console.log(this.data);
       if (name === undefined) {
 
         return null;
       } else {
-        console.log("Found value for", name);
+        console.log("Found value for", Name);
 
 
         // get the corresponded encrypted password
-        const encrypted_password = Buffer.from(this.data[Entry], 'base64');
 
+        const encrypted_password = decodeBuffer(this.data.kvs[Entry]);
 
         // decrypt the password
         // iv is the first 16 bytes of encrypted password
@@ -222,13 +228,15 @@ class Keychain {
 
         const r2 = await subtle.digest(
           "SHA-256",
-          stringToBuffer(r1)
+          r1
         );
+
         const pass_key = await subtle.sign(
           "HMAC",
           this.secrets.KEY,
           r2
         );
+
         const password_key = await subtle.importKey(
           "raw",
           pass_key,
@@ -240,13 +248,16 @@ class Keychain {
         const password = await subtle.decrypt(
           {
             name: "AES-GCM",
-            iv: iv
+            iv: iv,
+            additionalData: stringToBuffer(Name),
+            tagLength: 128
           },
           password_key,
           encrypted_password.subarray(16,)
         );
 
-        return bufferToString(password);
+        return unpadPassword(bufferToString(password));
+        // return bufferToString(password);
       }
     } catch (error) {
       console.log("Error getting value:", error);
@@ -278,7 +289,6 @@ class Keychain {
         stringToBuffer(name)
       );
 
-
       const domain_key = await subtle.sign(
         {
           name: "HMAC",
@@ -305,14 +315,14 @@ class Keychain {
         stringToBuffer(name)
       );
 
-      const Entry = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
+      const Entry = encodeBuffer(name_sign);
 
 
       /**------------------------------- */
 
       const r2 = await subtle.digest(
         "SHA-256",
-        stringToBuffer(r1)
+        r1
       );
       const pass_key = await subtle.sign(
         "HMAC",
@@ -336,19 +346,22 @@ class Keychain {
       const value_encrypted = await subtle.encrypt(
         {
           name: "AES-GCM",
-          iv: iv
+          iv: iv,
+          additionalData: stringToBuffer(name),
+          tagLength: 128
         },
         password_key,
-        stringToBuffer(value)
+        stringToBuffer(padPassword(value))
+        // stringToBuffer(value)
       );
 
       // arraybuffer to string
 
       const a = new Uint8Array(value_encrypted);
-      const string_value_encrypted = btoa(String.fromCharCode.apply(null, new Uint8Array(concatenateUint8Arrays(iv, new Uint8Array(value_encrypted)))));
+      const string_value_encrypted = encodeBuffer(concatenateUint8Arrays(iv, new Uint8Array(value_encrypted)));
+      const tag = 
 
-
-      this.data[Entry] = string_value_encrypted;
+      this.data.kvs[Entry] = string_value_encrypted;
 
     } catch (error) {
       console.error("Error setting value:", error);
@@ -399,14 +412,14 @@ class Keychain {
         stringToBuffer(name)
       );
 
-      const Entry = btoa(String.fromCharCode.apply(null, new Uint8Array(name_sign)));
+      const Entry = encodeBuffer(name_sign);
 
       /**----------------------------- */
 
-      if (this.data[Entry] === undefined) {
+      if (this.data.kvs[Entry] === undefined) {
         return false;
       } else {
-        delete this.data[Entry];
+        delete this.data.kvs[Entry];
         return true;
       }
     } catch (error) {
@@ -470,4 +483,33 @@ function concatenateUint8Arrays(first, second) {
   concatenatedArray.set(second, first.length);
 
   return concatenatedArray;
+}
+
+// padding password with 1 and all remain are zero
+function padPassword(password) {
+  const passwordLength = password.length;
+  if (passwordLength > MAX_PASSWORD_LENGTH - 16) {
+    throw new Error("Password is too long");
+  } 
+  else {
+    const paddinglen = MAX_PASSWORD_LENGTH - passwordLength;
+    password += "1";
+    password += "0".repeat(paddinglen - 1);
+    return password;
+  }
+}
+
+// unpad
+function unpadPassword(paddingPassword) {
+
+  const padPasswordLength = paddingPassword.length;
+  if (padPasswordLength === 64){
+    let i = padPasswordLength - 1;
+    while (paddingPassword[i] === "0") {
+      i--;
+    }
+    return paddingPassword.slice(0, i);
+  } else{
+    throw new Error("Password is not valid padded");
+  }
 }
