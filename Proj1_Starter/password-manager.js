@@ -32,9 +32,10 @@ class Keychain {
     this.secrets = {
       /* Store member variables that you intend to be private here
          (information that an adversary should NOT see). */
-         KEY: KEY
+      KEY: KEY
     };
     this.salt = salt;
+    this.ready = true;
 
     // throw "Not Implemented!";
   };
@@ -108,13 +109,11 @@ class Keychain {
         exported_key
       ));
 
-
       if (KEY_verify !== jsonData.secrets.KEY) {
-        console.log(1);
         throw new Error('incorrect password');
       }
 
-      return new Keychain(jsonData.kvs, KEY_new, jsonData.salt);;
+      return new Keychain(jsonData.kvs, KEY_new, jsonData.salt);
 
     } catch (error) {
       console.error("Error loading keychain:", error);
@@ -136,7 +135,9 @@ class Keychain {
     */
   async dump() {
     try {
-
+      if (this.ready === false) {
+        throw new Error("Keychain not ready");
+      }
       const exported_key = await subtle.exportKey(
         "raw",
         this.secrets.KEY
@@ -146,14 +147,14 @@ class Keychain {
         exported_key
       ));
 
-      const pmJson = JSON.stringify({kvs: this.data.kvs, secrets: this.secrets, salt: this.salt});
+      const pmJson = JSON.stringify({ kvs: this.data.kvs, secrets: this.secrets, salt: this.salt });
 
       const pmShaStr = await subtle.digest(
         'SHA-256',
         stringToBuffer(pmJson)
       );
 
-
+      this.ready = false;
       return [pmJson, bufferToString(pmShaStr)];
     } catch (error) {
       console.error("Error dumping value:", error);
@@ -172,7 +173,9 @@ class Keychain {
     */
   async get(Name) {
     try {
-
+      if (this.ready === false) {
+        throw new Error("Keychain not ready");
+      }
       /**----------------------- */
       const r1 = await subtle.digest(
         "SHA-256",
@@ -278,9 +281,12 @@ class Keychain {
   */
   async set(name, value) {
     try {
+      if (this.ready === false) {
+        throw new Error("Keychain not ready");
+      }
+
       console.log("Setting value for", name, "to", value);
 
-      /**------------------ */
 
       /**---------------------------------- */
 
@@ -317,8 +323,11 @@ class Keychain {
 
       const Entry = encodeBuffer(name_sign);
 
-
       /**------------------------------- */
+
+      // generate an IV with length 128 bits
+      const iv = getRandomBytes(16);
+
 
       const r2 = await subtle.digest(
         "SHA-256",
@@ -329,9 +338,6 @@ class Keychain {
         this.secrets.KEY,
         r2
       ); //pass_key is used to create password_key by importKey()
-
-      // generate an IV with length 128 bits
-      const iv = getRandomBytes(16);
 
       const password_key = await subtle.importKey(
         "raw",
@@ -347,7 +353,7 @@ class Keychain {
         {
           name: "AES-GCM",
           iv: iv,
-          additionalData: stringToBuffer(name),
+          additionalData: stringToBuffer(name), // use this to prevent swap attack
           tagLength: 128
         },
         password_key,
@@ -359,7 +365,6 @@ class Keychain {
 
       const a = new Uint8Array(value_encrypted);
       const string_value_encrypted = encodeBuffer(concatenateUint8Arrays(iv, new Uint8Array(value_encrypted)));
-      const tag = 
 
       this.data.kvs[Entry] = string_value_encrypted;
 
@@ -379,6 +384,10 @@ class Keychain {
   */
   async remove(name) {
     try {
+      if (this.ready === false) {
+        throw new Error("Keychain not ready");
+      }
+
       console.log("Removing value for", name);
 
       /**----------------------- */
@@ -431,7 +440,11 @@ class Keychain {
 
 module.exports = { Keychain }
 
-
+/**
+ * 
+ * @param {string} password 
+ * @returns a CryptoKey
+ */
 function getKeyMaterial(password) {
   return subtle.importKey(
     "raw",
@@ -444,6 +457,12 @@ function getKeyMaterial(password) {
   );
 }
 
+/**
+ * 
+ * @param {string} password 
+ * @param {Uint8Array} _salt 
+ * @returns webcrypto.CryptoKey
+ */
 async function genKeyFromMasterPassword(password, _salt) {
   try {
     const keyMaterial = await getKeyMaterial(password);
@@ -471,7 +490,12 @@ async function genKeyFromMasterPassword(password, _salt) {
   }
 }
 
-
+/**
+ * 
+ * @param {Uint8Array} first 
+ * @param {Uint8Array} second 
+ * @returns an Uint8Array that is concatenation of 2 Uint8Array
+ */
 function concatenateUint8Arrays(first, second) {
   // Create a new array that can hold the combined length of both input arrays
   const concatenatedArray = new Uint8Array(first.length + second.length);
@@ -485,12 +509,16 @@ function concatenateUint8Arrays(first, second) {
   return concatenatedArray;
 }
 
-// padding password with 1 and all remain are zero
+/**
+ * 
+ * @param {string} password 
+ * @returns string
+ */
 function padPassword(password) {
   const passwordLength = password.length;
   if (passwordLength > MAX_PASSWORD_LENGTH - 16) {
     throw new Error("Password is too long");
-  } 
+  }
   else {
     const paddinglen = MAX_PASSWORD_LENGTH - passwordLength;
     password += "1";
@@ -499,17 +527,21 @@ function padPassword(password) {
   }
 }
 
-// unpad
+/**
+ * 
+ * @param {string} paddingPassword 
+ * @returns string
+ */
 function unpadPassword(paddingPassword) {
 
   const padPasswordLength = paddingPassword.length;
-  if (padPasswordLength === 64){
+  if (padPasswordLength === 64) {
     let i = padPasswordLength - 1;
     while (paddingPassword[i] === "0") {
       i--;
     }
     return paddingPassword.slice(0, i);
-  } else{
+  } else {
     throw new Error("Password is not valid padded");
   }
 }
