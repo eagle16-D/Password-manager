@@ -1,5 +1,7 @@
 # Password-manager
  
-- Sửa code trong file Proj1_Starter/password_manager.js
-- chạy test file Proj1_Starter/test/test-password-manager.js
-    - npm run test
+- All logic code are written in file Proj1_Starter/password_manager.js
+- To run tests for this, let run the following command
+  ```
+  npm run test
+  ```
