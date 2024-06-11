@@ -7,11 +7,9 @@
     ```
     cd Proj1_Starter
     ```
-  + install ```mocha``` to run the test
+  + install ```mocha``` to run the test: 
     ```npm install mocha```
-  + run test 
-  ```
-  npm run test
-  ```
+  + run tests: 
+    ```npm run test```
 # Instruction
 - https://crypto.stanford.edu/~dabo/cs255/hw_and_proj/proj1.pdf
