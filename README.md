@@ -3,6 +3,13 @@
  
 - All logic code are written in file Proj1_Starter/password_manager.js
 - To run tests for this, let run the following command
+  + go to the Proj1_Starter directory
+    ```
+    cd Proj1_Starter
+    ```
+  + install ```mocha``` to run the test
+    ```npm install mocha```
+  + run test 
   ```
   npm run test
   ```
